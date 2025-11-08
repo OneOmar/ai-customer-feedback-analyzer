@@ -59,7 +59,6 @@ export interface FeedbackAnalysis {
 }
 
 export interface AnalysisInsert {
-  feedback_id: string
   sentiment?: 'positive' | 'negative' | 'neutral' | 'mixed'
   sentiment_score?: number
   topics?: string[]
