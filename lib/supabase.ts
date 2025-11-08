@@ -600,5 +600,17 @@ export async function getSentimentStats(userId: string): Promise<{
 /**
  * @deprecated Use createBrowserClient() instead
  * Legacy browser client instance
+ * 
+ * Note: This creates the client lazily to avoid environment variable
+ * issues during module loading (e.g., in scripts that use dotenv)
  */
-export const supabase = createBrowserClient()
+let _supabaseInstance: ReturnType<typeof createBrowserClient> | null = null
+
+export const supabase = new Proxy({} as ReturnType<typeof createBrowserClient>, {
+  get(target, prop) {
+    if (!_supabaseInstance) {
+      _supabaseInstance = createBrowserClient()
+    }
+    return (_supabaseInstance as any)[prop]
+  }
+})
