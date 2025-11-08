@@ -1,256 +1,197 @@
-import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
-import { insertFeedback, insertAnalysis } from '@/lib/supabase'
-import { checkQuota, incrementUsage } from '@/lib/billing'
-import { openai } from '@/lib/openai'
+import { NextRequest, NextResponse } from 'next/server';
+import { insertFeedback, insertAnalysis, updateFeedbackEmbedding } from '@/lib/supabase';
+import { generateEmbedding, analyzeFeedback } from '@/lib/langchain';
+// import { auth } from '@clerk/nextjs/server';
+// import { checkQuota } from '@/lib/billing'; // TODO: Import when billing module is ready
 
 /**
- * Analyze Feedback Endpoint
+ * Request body interface
+ */
+interface AnalyzeRequestBody {
+  userId: string;
+  text: string;
+  rating?: number;
+  source?: string;
+  productId?: string;
+  username?: string;
+}
+
+/**
  * POST /api/analyze
  * 
- * Analyzes customer feedback using AI with quota enforcement
+ * Analyzes customer feedback by:
+ * 1. Inserting feedback into database
+ * 2. Generating and storing embeddings
+ * 3. Running AI analysis (sentiment, topics, summary, recommendation)
+ * 4. Storing analysis results
  * 
- * Request Body:
- * {
- *   feedbackId?: string,     // Existing feedback ID (optional)
- *   text: string,            // Feedback text to analyze
- *   rating?: number,         // Rating 1-5
- *   source?: string         // Source (web, email, etc.)
- * }
- * 
- * Response:
- * {
- *   success: boolean,
- *   data: {
- *     feedback: Feedback,
- *     analysis: FeedbackAnalysis,
- *     quota: QuotaResult
- *   }
- * }
- * 
- * Example Usage:
- * ```typescript
- * const response = await fetch('/api/analyze', {
- *   method: 'POST',
- *   headers: { 'Content-Type': 'application/json' },
- *   body: JSON.stringify({
- *     text: 'Great product!',
- *     rating: 5,
- *     source: 'web'
- *   })
- * })
- * ```
+ * Cost: ~3 LLM API calls per request (sentiment, topics, summary)
  */
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate user
-    const { userId } = await auth()
-    
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Please sign in to analyze feedback' },
-        { status: 401 }
-      )
-    }
+    // Parse request body
+    const body: AnalyzeRequestBody = await request.json();
+    const { userId, text, rating, source, productId, username } = body;
 
-    // 2. Parse request body
-    const { feedbackId, text, rating, source } = await req.json()
-
-    if (!text || text.trim().length === 0) {
+    // Validate required fields
+    if (!userId || !text) {
       return NextResponse.json(
-        { error: 'Validation error', message: 'Feedback text is required' },
+        { error: 'Missing required fields: userId and text are required' },
         { status: 400 }
-      )
+      );
     }
 
-    // 3. Check quota BEFORE processing
-    const quota = await checkQuota(userId)
-    
-    if (!quota.allowed) {
+    if (typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json(
-        {
-          error: 'Quota exceeded',
-          message: `You've used all ${quota.limit} analyses this month. Upgrade your plan for more.`,
-          quota: {
-            used: quota.used,
-            limit: quota.limit,
-            plan: quota.plan,
-            resetsAt: quota.resetsAt
-          }
-        },
-        { status: 429 } // 429 Too Many Requests
-      )
+        { error: 'Invalid text: must be a non-empty string' },
+        { status: 400 }
+      );
     }
 
-    // 4. Insert or get feedback
-    let feedback
-    if (feedbackId) {
-      // Analyzing existing feedback
-      feedback = { id: feedbackId }
-    } else {
-      // Insert new feedback
-      feedback = await insertFeedback(userId, text, {
-        rating,
-        source: source || 'api'
-      })
-
-      if (!feedback) {
-        return NextResponse.json(
-          { error: 'Database error', message: 'Failed to save feedback' },
-          { status: 500 }
-        )
-      }
-    }
-
-    // 5. Perform AI sentiment analysis
-    console.log('Analyzing feedback with OpenAI...')
+    // TODO: Verify userId via Clerk authentication
+    // Uncomment when Clerk is configured:
+    /*
+    const { userId: authenticatedUserId } = await auth();
     
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a sentiment analysis expert. Analyze the following customer feedback and respond with valid JSON only:
-{
-  "sentiment": "positive" | "negative" | "neutral" | "mixed",
-  "score": number between -1 and 1,
-  "topics": array of 2-5 key topics as strings,
-  "summary": brief 1-2 sentence summary,
-  "recommendation": suggested action for the business
-}
+    if (!authenticatedUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized: No valid session found' },
+        { status: 401 }
+      );
+    }
+    
+    // Verify the userId in the request matches the authenticated user
+    if (authenticatedUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden: User ID mismatch' },
+        { status: 403 }
+      );
+    }
+    */
 
-Be concise and accurate. Extract meaningful topics from the feedback.`
+    // TODO: Check billing quota before performing heavy operations
+    // Uncomment when billing module is ready:
+    /*
+    const quotaCheck = await checkQuota(userId);
+    if (!quotaCheck.allowed) {
+      return NextResponse.json(
+        { 
+          error: 'Quota exceeded', 
+          message: quotaCheck.message,
+          upgradeUrl: '/pricing'
         },
-        {
-          role: 'user',
-          content: text
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3
-    })
+        { status: 429 } // Too Many Requests
+      );
+    }
+    */
 
-    // Parse AI response
-    const aiResult = JSON.parse(completion.choices[0].message.content || '{}')
+    // Step 1: Insert feedback into database
+    const feedback = await insertFeedback(userId, text, {
+      rating,
+      source,
+      product_id: productId,
+      username,
+    });
 
-    // 6. Save analysis to database
-    const analysis = await insertAnalysis(feedback.id, {
-      sentiment: aiResult.sentiment,
-      sentiment_score: aiResult.score,
-      topics: aiResult.topics || [],
-      summary: aiResult.summary,
-      recommendation: aiResult.recommendation,
-      confidence_score: 0.85 // Could be calculated from AI response
-    })
+    if (!feedback) {
+      return NextResponse.json(
+        { error: 'Failed to insert feedback into database' },
+        { status: 500 }
+      );
+    }
+
+    const feedbackId = feedback.id;
+
+    // Step 2: Generate embedding and update feedback record
+    try {
+      const embedding = await generateEmbedding(text);
+      
+      const embeddingUpdated = await updateFeedbackEmbedding(feedbackId, embedding);
+      
+      if (!embeddingUpdated) {
+        console.warn(`Failed to update embedding for feedback ${feedbackId}`);
+        // Non-critical: continue with analysis even if embedding update fails
+      }
+    } catch (embeddingError) {
+      console.error('Error generating/storing embedding:', embeddingError);
+      // Non-critical: continue with analysis even if embedding generation fails
+    }
+
+    // Step 3: Analyze feedback with AI (sentiment, topics, summary, recommendation)
+    let analysisResult;
+    try {
+      analysisResult = await analyzeFeedback(text);
+    } catch (analysisError) {
+      console.error('Error analyzing feedback:', analysisError);
+      return NextResponse.json(
+        { 
+          error: 'Failed to analyze feedback', 
+          feedbackId,
+          message: analysisError instanceof Error ? analysisError.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
+    }
+
+    // Step 4: Insert analysis results into database
+    const analysis = await insertAnalysis(feedbackId, {
+      sentiment: analysisResult.sentiment,
+      sentiment_score: analysisResult.sentiment_score,
+      topics: analysisResult.topics,
+      summary: analysisResult.summary,
+      recommendation: analysisResult.recommendation,
+    });
 
     if (!analysis) {
-      // Analysis failed to save, but we've already used the quota
-      // Still increment usage since AI was called
-      await incrementUsage(userId)
-      
       return NextResponse.json(
-        { error: 'Database error', message: 'Failed to save analysis' },
+        { 
+          error: 'Failed to save analysis results', 
+          feedbackId,
+          analysis: analysisResult 
+        },
         { status: 500 }
-      )
+      );
     }
 
-    // 7. Increment usage count AFTER successful analysis
-    const usageIncremented = await incrementUsage(userId)
-    
-    if (!usageIncremented) {
-      console.error('Warning: Failed to increment usage for user:', userId)
-      // Continue anyway - don't fail the request
-    }
-
-    // 8. Get updated quota for response
-    const updatedQuota = await checkQuota(userId)
-
-    // 9. Return success response
+    // Step 5: Return success response
     return NextResponse.json({
       success: true,
-      data: {
-        feedback,
-        analysis,
-        quota: {
-          remaining: updatedQuota.remaining,
-          used: updatedQuota.used,
-          limit: updatedQuota.limit,
-          plan: updatedQuota.plan,
-          resetsAt: updatedQuota.resetsAt
-        }
-      }
-    })
-
-  } catch (error: any) {
-    console.error('Error in POST /api/analyze:', error)
-    
-    // Check if it's an OpenAI API error
-    if (error.code === 'insufficient_quota') {
-      return NextResponse.json(
-        { error: 'OpenAI quota exceeded', message: 'Please contact support' },
-        { status: 503 }
-      )
-    }
-
-    return NextResponse.json(
-      { error: 'Internal server error', message: 'Failed to analyze feedback' },
-      { status: 500 }
-    )
-  }
-}
-
-/**
- * Get analysis status
- * GET /api/analyze?feedbackId=xxx
- * 
- * Returns existing analysis for a feedback item
- */
-export async function GET(req: Request) {
-  try {
-    const { userId } = await auth()
-    
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { searchParams } = new URL(req.url)
-    const feedbackId = searchParams.get('feedbackId')
-
-    if (!feedbackId) {
-      return NextResponse.json(
-        { error: 'feedbackId parameter required' },
-        { status: 400 }
-      )
-    }
-
-    // Query analysis from database
-    const { createServerClient } = await import('@/lib/supabase')
-    const supabase = createServerClient()
-
-    const { data: analysis, error } = await supabase
-      .from('feedback_analysis')
-      .select('*')
-      .eq('feedback_id', feedbackId)
-      .single()
-
-    if (error || !analysis) {
-      return NextResponse.json(
-        { error: 'Analysis not found' },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: analysis
-    })
+      feedbackId,
+      analysis: {
+        sentiment: analysis.sentiment,
+        sentiment_score: analysis.sentiment_score,
+        topics: analysis.topics,
+        summary: analysis.summary,
+        recommendation: analysis.recommendation,
+      },
+    });
 
   } catch (error) {
-    console.error('Error in GET /api/analyze:', error)
+    console.error('Unexpected error in /api/analyze:', error);
+    
+    // Handle JSON parsing errors
+    if (error instanceof SyntaxError) {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
+    // Generic error response
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
-    )
+    );
   }
 }
 
+// Prevent GET requests
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Method not allowed. Use POST to analyze feedback.' },
+    { status: 405 }
+  );
+}
