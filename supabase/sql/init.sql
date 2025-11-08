@@ -172,6 +172,12 @@ ALTER TABLE uploads ENABLE ROW LEVEL SECURITY;
 -- Users can only see and manage their own feedback
 -- ----------------------------------------------------------------------------
 
+-- Drop existing policies if they exist (for re-running script)
+DROP POLICY IF EXISTS "Users can view their own feedback" ON feedback;
+DROP POLICY IF EXISTS "Users can insert their own feedback" ON feedback;
+DROP POLICY IF EXISTS "Users can update their own feedback" ON feedback;
+DROP POLICY IF EXISTS "Users can delete their own feedback" ON feedback;
+
 -- Policy: Users can view their own feedback
 CREATE POLICY "Users can view their own feedback"
 ON feedback
@@ -207,6 +213,12 @@ USING (user_id = auth.jwt()->>'sub');
 -- Feedback Analysis Policies
 -- Users can only see analysis of their own feedback
 -- ----------------------------------------------------------------------------
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view analysis of their own feedback" ON feedback_analysis;
+DROP POLICY IF EXISTS "Users can insert analysis for their own feedback" ON feedback_analysis;
+DROP POLICY IF EXISTS "Users can update analysis of their own feedback" ON feedback_analysis;
+DROP POLICY IF EXISTS "Users can delete analysis of their own feedback" ON feedback_analysis;
 
 -- Policy: Users can view analysis of their own feedback
 CREATE POLICY "Users can view analysis of their own feedback"
@@ -257,6 +269,11 @@ USING (
 -- Users can only see their own uploads
 -- ----------------------------------------------------------------------------
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view their own uploads" ON uploads;
+DROP POLICY IF EXISTS "Users can insert their own uploads" ON uploads;
+DROP POLICY IF EXISTS "Users can update their own uploads" ON uploads;
+
 -- Policy: Users can view their own uploads
 CREATE POLICY "Users can view their own uploads"
 ON uploads
@@ -288,6 +305,10 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Drop existing triggers if they exist (for re-running script)
+DROP TRIGGER IF EXISTS update_feedback_updated_at ON feedback;
+DROP TRIGGER IF EXISTS update_feedback_analysis_updated_at ON feedback_analysis;
 
 -- Apply the trigger to feedback table
 CREATE TRIGGER update_feedback_updated_at
@@ -343,7 +364,10 @@ COMMENT ON FUNCTION match_feedback IS 'Performs semantic similarity search on fe
 
 -- View: Feedback with analysis
 -- Joins feedback and analysis for easy querying
-CREATE OR REPLACE VIEW feedback_with_analysis AS
+-- SECURITY INVOKER ensures RLS policies are applied based on the querying user
+CREATE OR REPLACE VIEW feedback_with_analysis
+WITH (security_invoker = true)
+AS
 SELECT 
     f.id,
     f.user_id,
@@ -364,7 +388,7 @@ FROM feedback f
 LEFT JOIN feedback_analysis fa ON f.id = fa.feedback_id;
 
 -- Add comment to view
-COMMENT ON VIEW feedback_with_analysis IS 'Combined view of feedback and their analysis results';
+COMMENT ON VIEW feedback_with_analysis IS 'Combined view of feedback and their analysis results (with RLS enforcement)';
 
 -- ----------------------------------------------------------------------------
 -- 7. SEED DATA (Optional - for testing)

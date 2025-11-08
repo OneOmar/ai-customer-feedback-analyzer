@@ -87,6 +87,11 @@ ALTER TABLE usage ENABLE ROW LEVEL SECURITY;
 -- RLS Policies for Subscriptions
 -- ----------------------------------------------------------------------------
 
+-- Drop existing policies if they exist (for re-running script)
+DROP POLICY IF EXISTS "Users can view their own subscription" ON subscriptions;
+DROP POLICY IF EXISTS "Users can update their own subscription" ON subscriptions;
+DROP POLICY IF EXISTS "System can insert subscriptions" ON subscriptions;
+
 -- Users can view their own subscription
 CREATE POLICY "Users can view their own subscription"
 ON subscriptions
@@ -110,6 +115,11 @@ WITH CHECK (true);
 -- RLS Policies for Usage
 -- ----------------------------------------------------------------------------
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view their own usage" ON usage;
+DROP POLICY IF EXISTS "System can insert usage" ON usage;
+DROP POLICY IF EXISTS "System can update usage" ON usage;
+
 -- Users can view their own usage
 CREATE POLICY "Users can view their own usage"
 ON usage
@@ -131,6 +141,10 @@ WITH CHECK (true);
 -- ----------------------------------------------------------------------------
 -- Triggers
 -- ----------------------------------------------------------------------------
+
+-- Drop existing triggers if they exist (for re-running script)
+DROP TRIGGER IF EXISTS update_subscriptions_updated_at ON subscriptions;
+DROP TRIGGER IF EXISTS update_usage_updated_at ON usage;
 
 -- Apply auto-update trigger to subscriptions
 CREATE TRIGGER update_subscriptions_updated_at
