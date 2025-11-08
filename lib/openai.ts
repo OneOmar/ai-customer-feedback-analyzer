@@ -1,5 +1,67 @@
 import OpenAI from 'openai';
 
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+/**
+ * Maximum number of items to process per batch
+ * Can be overridden via MAX_ITEMS_PER_BATCH environment variable
+ */
+export const MAX_ITEMS_PER_BATCH = parseInt(
+  process.env.MAX_ITEMS_PER_BATCH || '100',
+  10
+);
+
+// ============================================================================
+// TELEMETRY HELPERS
+// ============================================================================
+
+/**
+ * Logs telemetry data for monitoring and debugging
+ */
+function logTelemetry(data: {
+  operation: string;
+  startTime: number;
+  endTime: number;
+  success: boolean;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const duration = data.endTime - data.startTime;
+  const status = data.success ? '✓' : '✗';
+  
+  console.log(
+    `[OpenAI] ${status} ${data.operation} (${duration}ms)`,
+    data.metadata ? JSON.stringify(data.metadata) : ''
+  );
+  
+  if (data.error) {
+    console.error(`[OpenAI] Error in ${data.operation}:`, data.error);
+  }
+  
+  // TODO: Send telemetry to monitoring services
+  // Example Sentry integration:
+  // if (!data.success && data.error) {
+  //   Sentry.captureException(new Error(data.error), {
+  //     tags: { operation: data.operation },
+  //     extra: { duration, metadata: data.metadata }
+  //   });
+  // }
+  
+  // Example PostHog integration:
+  // posthog.capture('openai_api_call', {
+  //   operation: data.operation,
+  //   success: data.success,
+  //   duration_ms: duration,
+  //   ...data.metadata
+  // });
+}
+
+// ============================================================================
+// CLIENT MANAGEMENT
+// ============================================================================
+
 /**
  * Returns a configured OpenAI client instance.
  * 
@@ -21,6 +83,10 @@ export function getOpenAIClient(): OpenAI {
   return new OpenAI({ apiKey });
 }
 
+// ============================================================================
+// API FUNCTIONS
+// ============================================================================
+
 /**
  * Generates embeddings for the given text using OpenAI's embedding model.
  * 
@@ -35,6 +101,7 @@ export function getOpenAIClient(): OpenAI {
  * ```
  */
 export async function embedText(text: string): Promise<number[]> {
+  const startTime = Date.now();
   const model = process.env.OPENAI_EMBED_MODEL;
   
   if (!model) {
@@ -48,9 +115,55 @@ export async function embedText(text: string): Promise<number[]> {
       input: text,
     });
     
-    return response.data[0].embedding;
+    const embedding = response.data[0].embedding;
+    const endTime = Date.now();
+    
+    // Log successful embedding generation
+    logTelemetry({
+      operation: 'embedText',
+      startTime,
+      endTime,
+      success: true,
+      metadata: {
+        model,
+        textLength: text.length,
+        embeddingDimensions: embedding.length,
+      },
+    });
+    
+    // TODO: Track successful embeddings in analytics
+    // Example PostHog:
+    // posthog.capture('embedding_generated', {
+    //   model,
+    //   text_length: text.length,
+    //   dimensions: embedding.length
+    // });
+    
+    return embedding;
   } catch (error) {
+    const endTime = Date.now();
     const message = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Log failed embedding generation
+    logTelemetry({
+      operation: 'embedText',
+      startTime,
+      endTime,
+      success: false,
+      error: message,
+      metadata: {
+        model,
+        textLength: text.length,
+      },
+    });
+    
+    // TODO: Track embedding failures in error monitoring
+    // Example Sentry:
+    // Sentry.captureException(error, {
+    //   tags: { operation: 'embedText', model },
+    //   extra: { textLength: text.length }
+    // });
+    
     throw new Error(`Failed to generate embedding: ${message}`);
   }
 }
@@ -70,6 +183,7 @@ export async function embedText(text: string): Promise<number[]> {
  * ```
  */
 export async function runLLM(prompt: string, maxTokens: number = 1000): Promise<string> {
+  const startTime = Date.now();
   const model = process.env.OPENAI_LLM_MODEL;
   
   if (!model) {
@@ -91,9 +205,58 @@ export async function runLLM(prompt: string, maxTokens: number = 1000): Promise<
       throw new Error('No content returned from OpenAI API');
     }
     
+    const endTime = Date.now();
+    
+    // Log successful LLM completion
+    logTelemetry({
+      operation: 'runLLM',
+      startTime,
+      endTime,
+      success: true,
+      metadata: {
+        model,
+        promptLength: prompt.length,
+        maxTokens,
+        responseLength: content.length,
+        tokensUsed: response.usage?.total_tokens,
+      },
+    });
+    
+    // TODO: Track LLM usage in analytics
+    // Example PostHog:
+    // posthog.capture('llm_completion', {
+    //   model,
+    //   prompt_length: prompt.length,
+    //   response_length: content.length,
+    //   tokens_used: response.usage?.total_tokens
+    // });
+    
     return content;
   } catch (error) {
+    const endTime = Date.now();
     const message = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Log failed LLM completion
+    logTelemetry({
+      operation: 'runLLM',
+      startTime,
+      endTime,
+      success: false,
+      error: message,
+      metadata: {
+        model,
+        promptLength: prompt.length,
+        maxTokens,
+      },
+    });
+    
+    // TODO: Track LLM failures in error monitoring
+    // Example Sentry:
+    // Sentry.captureException(error, {
+    //   tags: { operation: 'runLLM', model },
+    //   extra: { promptLength: prompt.length, maxTokens }
+    // });
+    
     throw new Error(`Failed to run LLM: ${message}`);
   }
 }

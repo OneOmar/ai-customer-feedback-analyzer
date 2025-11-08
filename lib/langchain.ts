@@ -1,4 +1,11 @@
-import { embedText, runLLM } from './openai';
+import { embedText, runLLM, MAX_ITEMS_PER_BATCH } from './openai';
+
+// Export MAX_ITEMS_PER_BATCH for use in API routes
+export { MAX_ITEMS_PER_BATCH };
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 /**
  * Type definition for feedback analysis result.
@@ -11,9 +18,58 @@ export interface FeedbackAnalysis {
   recommendation: string;
 }
 
+// ============================================================================
+// TELEMETRY HELPERS
+// ============================================================================
+
+/**
+ * Logs telemetry data for monitoring and debugging
+ */
+function logTelemetry(data: {
+  operation: string;
+  startTime: number;
+  endTime: number;
+  success: boolean;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const duration = data.endTime - data.startTime;
+  const status = data.success ? '✓' : '✗';
+  
+  console.log(
+    `[Langchain] ${status} ${data.operation} (${duration}ms)`,
+    data.metadata ? JSON.stringify(data.metadata) : ''
+  );
+  
+  if (data.error) {
+    console.error(`[Langchain] Error in ${data.operation}:`, data.error);
+  }
+  
+  // TODO: Send telemetry to monitoring services
+  // Example Sentry integration:
+  // if (!data.success && data.error) {
+  //   Sentry.captureException(new Error(data.error), {
+  //     tags: { operation: data.operation },
+  //     extra: { duration, metadata: data.metadata }
+  //   });
+  // }
+  
+  // Example PostHog integration:
+  // posthog.capture('langchain_operation', {
+  //   operation: data.operation,
+  //   success: data.success,
+  //   duration_ms: duration,
+  //   ...data.metadata
+  // });
+}
+
+// ============================================================================
+// EMBEDDING FUNCTIONS
+// ============================================================================
+
 /**
  * Generates embeddings for the given text.
- * Thin wrapper around the OpenAI embedText function.
+ * Thin wrapper around the OpenAI embedText function with telemetry.
  * 
  * @param {string} text - The text to embed
  * @returns {Promise<number[]>} Array of embedding values
@@ -25,8 +81,44 @@ export interface FeedbackAnalysis {
  * ```
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-  return embedText(text);
+  const startTime = Date.now();
+  
+  try {
+    const embedding = await embedText(text);
+    const endTime = Date.now();
+    
+    logTelemetry({
+      operation: 'generateEmbedding',
+      startTime,
+      endTime,
+      success: true,
+      metadata: {
+        textLength: text.length,
+        dimensions: embedding.length,
+      },
+    });
+    
+    return embedding;
+  } catch (error) {
+    const endTime = Date.now();
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    
+    logTelemetry({
+      operation: 'generateEmbedding',
+      startTime,
+      endTime,
+      success: false,
+      error: message,
+      metadata: { textLength: text.length },
+    });
+    
+    throw error;
+  }
 }
+
+// ============================================================================
+// TEXT PROCESSING
+// ============================================================================
 
 /**
  * Chunks text into smaller pieces based on approximate sentence boundaries.
@@ -93,6 +185,10 @@ export function chunkText(text: string, maxLen: number = 3000): string[] {
   return chunks.length > 0 ? chunks : [text];
 }
 
+// ============================================================================
+// ANALYSIS HELPERS
+// ============================================================================
+
 /**
  * Safely parses JSON with fallback to default value.
  * 
@@ -111,6 +207,10 @@ function safeParseJSON<T>(jsonStr: string, fallback: T): T {
     return fallback;
   }
 }
+
+// ============================================================================
+// FEEDBACK ANALYSIS
+// ============================================================================
 
 /**
  * Analyzes customer feedback using multiple LLM calls for sentiment, topics, and recommendations.
@@ -134,6 +234,7 @@ function safeParseJSON<T>(jsonStr: string, fallback: T): T {
  * ```
  */
 export async function analyzeFeedback(text: string): Promise<FeedbackAnalysis> {
+  const startTime = Date.now();
   // Subtask 1: Sentiment classification
   const sentimentPrompt = `Analyze the sentiment of this customer feedback. Return ONLY JSON in this format: {"sentiment": "positive"|"neutral"|"negative"|"mixed", "confidence": 0.0-1.0}
 
@@ -212,6 +313,40 @@ Feedback: ${text}`;
   } catch (error) {
     console.error('Summary generation failed:', error);
   }
+
+  const endTime = Date.now();
+  
+  // Log successful analysis completion
+  logTelemetry({
+    operation: 'analyzeFeedback',
+    startTime,
+    endTime,
+    success: true,
+    metadata: {
+      textLength: text.length,
+      sentiment,
+      topicsCount: topics.length,
+      hasScore: sentiment_score !== undefined,
+    },
+  });
+  
+  // TODO: Track feedback analysis in analytics
+  // Example PostHog:
+  // posthog.capture('feedback_analyzed', {
+  //   sentiment,
+  //   topics_count: topics.length,
+  //   text_length: text.length,
+  //   has_sentiment_score: sentiment_score !== undefined
+  // });
+  
+  // TODO: Track analysis metrics in monitoring
+  // Example for business metrics:
+  // if (sentiment === 'negative') {
+  //   posthog.capture('negative_feedback_detected', {
+  //     topics,
+  //     sentiment_score
+  //   });
+  // }
 
   return {
     sentiment,
