@@ -12,14 +12,17 @@
     "test:coverage": "jest --coverage",
     "test:analyze": "tsx scripts/test-analyze.ts",
     "check:env": "tsx scripts/check-env.ts",
+    "check:disable-auth": "tsx scripts/check-disable-auth.ts",
     "seed:supabase": "tsx scripts/seed-supabase.ts",
     "seed:cleanup": "tsx scripts/seed-supabase.ts --cleanup"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.34.5",
     "@langchain/core": "^0.3.79",
+    "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-toast": "^1.2.15",
     "@stripe/stripe-js": "^8.3.0",
     "@supabase/supabase-js": "^2.80.0",
     "class-variance-authority": "^0.7.1",
