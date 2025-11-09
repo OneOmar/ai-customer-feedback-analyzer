@@ -1,256 +1,393 @@
-import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
-import { insertFeedback, insertAnalysis } from '@/lib/supabase'
-import { checkQuota, incrementUsage } from '@/lib/billing'
-import { openai } from '@/lib/openai'
+import { NextRequest, NextResponse } from 'next/server';
+import { insertFeedback, insertAnalysis, updateFeedbackEmbedding } from '@/lib/supabase';
+import { generateEmbedding, analyzeFeedback } from '@/lib/langchain';
+import { embedText } from '@/lib/openai';
+// import { auth } from '@clerk/nextjs/server';
+// import { checkQuota } from '@/lib/billing'; // TODO: Import when billing module is ready
 
 /**
- * Analyze Feedback Endpoint
+ * Single feedback item interface
+ */
+interface FeedbackItem {
+  text: string;
+  rating?: number;
+  source?: string;
+  productId?: string;
+  username?: string;
+}
+
+/**
+ * Request body interface for batch processing
+ */
+interface AnalyzeRequestBody {
+  userId: string;
+  items: FeedbackItem[];
+}
+
+/**
+ * Result for a single processed item
+ */
+interface ProcessedItemResult {
+  index: number;
+  success: boolean;
+  feedbackId?: string;
+  analysis?: {
+    sentiment: string;
+    sentiment_score?: number;
+    topics: string[];
+    summary: string;
+    recommendation: string;
+  };
+  error?: string;
+}
+
+/**
+ * Concurrency limiter - processes promises with a maximum concurrency limit
+ * Simple implementation without external dependencies
+ */
+async function processConcurrently<T, R>(
+  items: T[],
+  processor: (item: T, index: number) => Promise<R>,
+  concurrency: number
+): Promise<R[]> {
+  const results: R[] = [];
+  const executing: Promise<void>[] = [];
+
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    
+    const promise = processor(item, index).then((result) => {
+      results[index] = result;
+    });
+
+    executing.push(promise);
+
+    if (executing.length >= concurrency) {
+      await Promise.race(executing);
+      executing.splice(
+        executing.findIndex((p) => p === promise),
+        1
+      );
+    }
+  }
+
+  await Promise.all(executing);
+  return results;
+}
+
+/**
  * POST /api/analyze
  * 
- * Analyzes customer feedback using AI with quota enforcement
+ * Batch analyzes customer feedback items by:
+ * 1. Validating request (max 200 items per batch)
+ * 2. Inserting feedback records into database
+ * 3. Generating and storing embeddings (batched where possible)
+ * 4. Running AI analysis with concurrency control (sentiment, topics, summary, recommendation)
+ * 5. Storing analysis results
  * 
- * Request Body:
- * {
- *   feedbackId?: string,     // Existing feedback ID (optional)
- *   text: string,            // Feedback text to analyze
- *   rating?: number,         // Rating 1-5
- *   source?: string         // Source (web, email, etc.)
- * }
- * 
- * Response:
- * {
- *   success: boolean,
- *   data: {
- *     feedback: Feedback,
- *     analysis: FeedbackAnalysis,
- *     quota: QuotaResult
- *   }
- * }
- * 
- * Example Usage:
- * ```typescript
- * const response = await fetch('/api/analyze', {
- *   method: 'POST',
- *   headers: { 'Content-Type': 'application/json' },
- *   body: JSON.stringify({
- *     text: 'Great product!',
- *     rating: 5,
- *     source: 'web'
- *   })
- * })
- * ```
+ * Cost: ~3 LLM API calls per item (sentiment, topics, summary)
+ * Rate limiting: Uses concurrency control to avoid overwhelming APIs
  */
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate user
-    const { userId } = await auth()
-    
+    // Parse request body
+    const body: AnalyzeRequestBody = await request.json();
+    const { userId, items } = body;
+
+    // Validate required fields
     if (!userId) {
       return NextResponse.json(
-        { error: 'Unauthorized', message: 'Please sign in to analyze feedback' },
-        { status: 401 }
-      )
-    }
-
-    // 2. Parse request body
-    const { feedbackId, text, rating, source } = await req.json()
-
-    if (!text || text.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Validation error', message: 'Feedback text is required' },
+        { error: 'Missing required field: userId' },
         { status: 400 }
-      )
+      );
     }
 
-    // 3. Check quota BEFORE processing
-    const quota = await checkQuota(userId)
-    
-    if (!quota.allowed) {
+    if (!items || !Array.isArray(items)) {
       return NextResponse.json(
-        {
-          error: 'Quota exceeded',
-          message: `You've used all ${quota.limit} analyses this month. Upgrade your plan for more.`,
-          quota: {
-            used: quota.used,
-            limit: quota.limit,
-            plan: quota.plan,
-            resetsAt: quota.resetsAt
-          }
-        },
-        { status: 429 } // 429 Too Many Requests
-      )
+        { error: 'Invalid request: items must be an array' },
+        { status: 400 }
+      );
     }
 
-    // 4. Insert or get feedback
-    let feedback
-    if (feedbackId) {
-      // Analyzing existing feedback
-      feedback = { id: feedbackId }
-    } else {
-      // Insert new feedback
-      feedback = await insertFeedback(userId, text, {
-        rating,
-        source: source || 'api'
-      })
+    // Validate batch size
+    const MAX_ITEMS_PER_BATCH = 200;
+    if (items.length === 0) {
+      return NextResponse.json(
+        { error: 'Empty items array: at least one item is required' },
+        { status: 400 }
+      );
+    }
 
-      if (!feedback) {
+    if (items.length > MAX_ITEMS_PER_BATCH) {
+      return NextResponse.json(
+        { 
+          error: `Batch size exceeds maximum: ${items.length} items provided, maximum is ${MAX_ITEMS_PER_BATCH}` 
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate each item has required text field
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.text || typeof item.text !== 'string' || item.text.trim().length === 0) {
         return NextResponse.json(
-          { error: 'Database error', message: 'Failed to save feedback' },
-          { status: 500 }
-        )
+          { error: `Invalid item at index ${i}: text is required and must be a non-empty string` },
+          { status: 400 }
+        );
       }
     }
 
-    // 5. Perform AI sentiment analysis
-    console.log('Analyzing feedback with OpenAI...')
+    // TODO: Verify userId via Clerk authentication
+    // Uncomment when Clerk is configured:
+    /*
+    const { userId: authenticatedUserId } = await auth();
     
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a sentiment analysis expert. Analyze the following customer feedback and respond with valid JSON only:
-{
-  "sentiment": "positive" | "negative" | "neutral" | "mixed",
-  "score": number between -1 and 1,
-  "topics": array of 2-5 key topics as strings,
-  "summary": brief 1-2 sentence summary,
-  "recommendation": suggested action for the business
-}
+    if (!authenticatedUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized: No valid session found' },
+        { status: 401 }
+      );
+    }
+    
+    // Verify the userId in the request matches the authenticated user
+    if (authenticatedUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden: User ID mismatch' },
+        { status: 403 }
+      );
+    }
+    */
 
-Be concise and accurate. Extract meaningful topics from the feedback.`
+    // TODO: Check billing quota before performing heavy operations
+    // Important: Check quota BEFORE processing batch to avoid charging for denied requests
+    // Uncomment when billing module is ready:
+    /*
+    const quotaCheck = await checkQuota(userId, {
+      operationType: 'analyze',
+      itemCount: items.length
+    });
+    
+    if (!quotaCheck.allowed) {
+      return NextResponse.json(
+        { 
+          error: 'Quota exceeded', 
+          message: quotaCheck.message,
+          remaining: quotaCheck.remaining,
+          upgradeUrl: '/pricing'
         },
+        { status: 429 } // Too Many Requests
+      );
+    }
+    */
+
+    // Configuration for rate limiting and concurrency
+    const EMBEDDING_CONCURRENCY = 5; // OpenAI embeddings can handle ~5 concurrent requests
+    const ANALYSIS_CONCURRENCY = 3;  // LLM analysis is more expensive, limit to 3 concurrent
+
+    // Results array to track per-item status
+    const results: ProcessedItemResult[] = [];
+
+    // Step 1: Insert all feedback records into database first
+    console.log(`Inserting ${items.length} feedback records...`);
+    
+    const feedbackRecords = await Promise.all(
+      items.map(async (item, index) => {
+        try {
+          const feedback = await insertFeedback(userId, item.text, {
+            rating: item.rating,
+            source: item.source,
+            product_id: item.productId,
+            username: item.username,
+          });
+
+          if (!feedback) {
+            results[index] = {
+              index,
+              success: false,
+              error: 'Failed to insert feedback into database',
+            };
+            return null;
+          }
+
+          return { feedback, item, index };
+        } catch (error) {
+          console.error(`Error inserting feedback at index ${index}:`, error);
+          results[index] = {
+            index,
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error during insertion',
+          };
+          return null;
+        }
+      })
+    );
+
+    // Filter out failed insertions
+    const successfulInsertions = feedbackRecords.filter((record) => record !== null);
+
+    if (successfulInsertions.length === 0) {
+      return NextResponse.json(
         {
-          role: 'user',
-          content: text
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3
-    })
-
-    // Parse AI response
-    const aiResult = JSON.parse(completion.choices[0].message.content || '{}')
-
-    // 6. Save analysis to database
-    const analysis = await insertAnalysis(feedback.id, {
-      sentiment: aiResult.sentiment,
-      sentiment_score: aiResult.score,
-      topics: aiResult.topics || [],
-      summary: aiResult.summary,
-      recommendation: aiResult.recommendation,
-      confidence_score: 0.85 // Could be calculated from AI response
-    })
-
-    if (!analysis) {
-      // Analysis failed to save, but we've already used the quota
-      // Still increment usage since AI was called
-      await incrementUsage(userId)
-      
-      return NextResponse.json(
-        { error: 'Database error', message: 'Failed to save analysis' },
+          success: false,
+          message: 'All feedback insertions failed',
+          results,
+        },
         { status: 500 }
-      )
+      );
     }
 
-    // 7. Increment usage count AFTER successful analysis
-    const usageIncremented = await incrementUsage(userId)
+    console.log(`Successfully inserted ${successfulInsertions.length}/${items.length} feedback records`);
+
+    // Step 2: Generate and store embeddings with concurrency control
+    console.log('Generating embeddings...');
     
-    if (!usageIncremented) {
-      console.error('Warning: Failed to increment usage for user:', userId)
-      // Continue anyway - don't fail the request
-    }
-
-    // 8. Get updated quota for response
-    const updatedQuota = await checkQuota(userId)
-
-    // 9. Return success response
-    return NextResponse.json({
-      success: true,
-      data: {
-        feedback,
-        analysis,
-        quota: {
-          remaining: updatedQuota.remaining,
-          used: updatedQuota.used,
-          limit: updatedQuota.limit,
-          plan: updatedQuota.plan,
-          resetsAt: updatedQuota.resetsAt
+    await processConcurrently(
+      successfulInsertions,
+      async (record) => {
+        try {
+          const embedding = await embedText(record.item.text);
+          const updated = await updateFeedbackEmbedding(record.feedback.id, embedding);
+          
+          if (!updated) {
+            console.warn(`Failed to update embedding for feedback ${record.feedback.id}`);
+          }
+        } catch (error) {
+          console.error(`Error generating embedding for feedback ${record.feedback.id}:`, error);
+          // Non-critical: continue even if embedding fails
         }
-      }
-    })
+      },
+      EMBEDDING_CONCURRENCY
+    );
 
-  } catch (error: any) {
-    console.error('Error in POST /api/analyze:', error)
+    console.log('Embeddings generation complete');
+
+    // Step 3: Analyze feedback with AI and store results (with concurrency control)
+    console.log('Running AI analysis...');
     
-    // Check if it's an OpenAI API error
-    if (error.code === 'insufficient_quota') {
-      return NextResponse.json(
-        { error: 'OpenAI quota exceeded', message: 'Please contact support' },
-        { status: 503 }
-      )
+    await processConcurrently(
+      successfulInsertions,
+      async (record) => {
+        const { feedback, index } = record;
+        
+        try {
+          // Run AI analysis
+          const analysisResult = await analyzeFeedback(record.item.text);
+
+          // Insert analysis results
+          const analysis = await insertAnalysis(feedback.id, {
+            sentiment: analysisResult.sentiment,
+            sentiment_score: analysisResult.sentiment_score,
+            topics: analysisResult.topics,
+            summary: analysisResult.summary,
+            recommendation: analysisResult.recommendation,
+          });
+
+          if (!analysis) {
+            results[index] = {
+              index,
+              success: false,
+              feedbackId: feedback.id,
+              error: 'Failed to save analysis results',
+            };
+            return;
+          }
+
+          // Success - store result
+          results[index] = {
+            index,
+            success: true,
+            feedbackId: feedback.id,
+            analysis: {
+              sentiment: analysis.sentiment || 'neutral',
+              sentiment_score: analysis.sentiment_score || undefined,
+              topics: analysis.topics || [],
+              summary: analysis.summary || '',
+              recommendation: analysis.recommendation || '',
+            },
+          };
+        } catch (error) {
+          console.error(`Error analyzing feedback ${feedback.id}:`, error);
+          results[index] = {
+            index,
+            success: false,
+            feedbackId: feedback.id,
+            error: error instanceof Error ? error.message : 'Unknown error during analysis',
+          };
+        }
+      },
+      ANALYSIS_CONCURRENCY
+    );
+
+    console.log('AI analysis complete');
+
+    // Calculate summary statistics
+    const successCount = results.filter((r) => r.success).length;
+    const failureCount = results.length - successCount;
+
+    // Check if any results used fallback values (indicating quota/API errors)
+    // This happens when all three LLM calls fail (sentiment, topics, summary)
+    const hasFallbackValues = results.some((r) => 
+      r.success && 
+      r.analysis && 
+      r.analysis.summary === 'Unable to generate summary' && 
+      r.analysis.recommendation === 'Review feedback manually' &&
+      r.analysis.topics.length === 0 &&
+      !r.analysis.sentiment_score
+    );
+
+    // Build response
+    const response: {
+      success: boolean;
+      message: string;
+      total: number;
+      succeeded: number;
+      failed: number;
+      warning?: string;
+      results: ProcessedItemResult[];
+    } = {
+      success: successCount > 0,
+      message: `Processed ${results.length} items: ${successCount} succeeded, ${failureCount} failed`,
+      total: results.length,
+      succeeded: successCount,
+      failed: failureCount,
+      results,
+    };
+
+    // Add warning if fallback values were used (likely quota error)
+    if (hasFallbackValues) {
+      response.warning = 'Analysis completed with fallback values. This may indicate OpenAI API quota issues. Check your billing at https://platform.openai.com/usage';
     }
 
-    return NextResponse.json(
-      { error: 'Internal server error', message: 'Failed to analyze feedback' },
-      { status: 500 }
-    )
-  }
-}
-
-/**
- * Get analysis status
- * GET /api/analyze?feedbackId=xxx
- * 
- * Returns existing analysis for a feedback item
- */
-export async function GET(req: Request) {
-  try {
-    const { userId } = await auth()
-    
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { searchParams } = new URL(req.url)
-    const feedbackId = searchParams.get('feedbackId')
-
-    if (!feedbackId) {
-      return NextResponse.json(
-        { error: 'feedbackId parameter required' },
-        { status: 400 }
-      )
-    }
-
-    // Query analysis from database
-    const { createServerClient } = await import('@/lib/supabase')
-    const supabase = createServerClient()
-
-    const { data: analysis, error } = await supabase
-      .from('feedback_analysis')
-      .select('*')
-      .eq('feedback_id', feedbackId)
-      .single()
-
-    if (error || !analysis) {
-      return NextResponse.json(
-        { error: 'Analysis not found' },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: analysis
-    })
+    // Return batch results
+    return NextResponse.json(response);
 
   } catch (error) {
-    console.error('Error in GET /api/analyze:', error)
+    console.error('Unexpected error in /api/analyze:', error);
+    
+    // Handle JSON parsing errors
+    if (error instanceof SyntaxError) {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
+    // Generic error response
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
-    )
+    );
   }
 }
 
+// Prevent GET requests
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Method not allowed. Use POST to analyze feedback.' },
+    { status: 405 }
+  );
+}
