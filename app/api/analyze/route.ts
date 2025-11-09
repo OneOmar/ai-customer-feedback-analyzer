@@ -325,15 +325,42 @@ export async function POST(request: NextRequest) {
     const successCount = results.filter((r) => r.success).length;
     const failureCount = results.length - successCount;
 
-    // Return batch results
-    return NextResponse.json({
+    // Check if any results used fallback values (indicating quota/API errors)
+    // This happens when all three LLM calls fail (sentiment, topics, summary)
+    const hasFallbackValues = results.some((r) => 
+      r.success && 
+      r.analysis && 
+      r.analysis.summary === 'Unable to generate summary' && 
+      r.analysis.recommendation === 'Review feedback manually' &&
+      r.analysis.topics.length === 0 &&
+      !r.analysis.sentiment_score
+    );
+
+    // Build response
+    const response: {
+      success: boolean;
+      message: string;
+      total: number;
+      succeeded: number;
+      failed: number;
+      warning?: string;
+      results: ProcessedItemResult[];
+    } = {
       success: successCount > 0,
       message: `Processed ${results.length} items: ${successCount} succeeded, ${failureCount} failed`,
       total: results.length,
       succeeded: successCount,
       failed: failureCount,
       results,
-    });
+    };
+
+    // Add warning if fallback values were used (likely quota error)
+    if (hasFallbackValues) {
+      response.warning = 'Analysis completed with fallback values. This may indicate OpenAI API quota issues. Check your billing at https://platform.openai.com/usage';
+    }
+
+    // Return batch results
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error('Unexpected error in /api/analyze:', error);

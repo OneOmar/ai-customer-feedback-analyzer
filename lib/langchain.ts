@@ -143,9 +143,12 @@ export function chunkText(text: string, maxLen: number = 3000): string[] {
   // Split by sentence-ending punctuation followed by space
   const sentences = text.split(/(?<=[.!?])\s+/);
   
+  // If split resulted in no sentences (e.g., single long word), treat entire text as one "sentence"
+  const textToProcess = sentences.length === 1 && sentences[0] === text ? [text] : sentences;
+  
   let currentChunk = '';
   
-  for (const sentence of sentences) {
+  for (const sentence of textToProcess) {
     // If single sentence exceeds maxLen, split it by word boundaries
     if (sentence.length > maxLen) {
       if (currentChunk) {
@@ -154,6 +157,17 @@ export function chunkText(text: string, maxLen: number = 3000): string[] {
       }
       
       const words = sentence.split(/\s+/);
+      
+      // If it's a single word longer than maxLen, split it character-by-character
+      if (words.length === 1) {
+        const longWord = words[0];
+        for (let i = 0; i < longWord.length; i += maxLen) {
+          chunks.push(longWord.slice(i, i + maxLen));
+        }
+        continue;
+      }
+      
+      // Otherwise, split by word boundaries
       for (const word of words) {
         if ((currentChunk + ' ' + word).length > maxLen) {
           if (currentChunk) {

@@ -11,16 +11,29 @@ Tests the `/api/analyze` endpoint with sample feedback data.
 **Usage:**
 
 ```bash
-# Basic usage (requires TEST_USER_ID)
+# Basic usage (uses default test user ID)
+npm run test:analyze
+
+# With specific user ID (Bash/Unix)
 TEST_USER_ID=user_test_123 npm run test:analyze
 
-# With custom API URL
+# With specific user ID (PowerShell)
+$env:TEST_USER_ID="user_test_123"; npm run test:analyze
+
+# With custom API URL (Bash/Unix)
 LOCAL_API_URL=http://localhost:4000 TEST_USER_ID=user_test_123 npm run test:analyze
+
+# With custom API URL (PowerShell)
+$env:LOCAL_API_URL="http://localhost:4000"; $env:TEST_USER_ID="user_test_123"; npm run test:analyze
+
+# Or add to .env file:
+TEST_USER_ID=user_test_123
+LOCAL_API_URL=http://localhost:3000
 ```
 
 **Environment Variables:**
 
-- `TEST_USER_ID` (required) - User ID for testing
+- `TEST_USER_ID` (optional) - User ID for testing (defaults to `test_user_<timestamp>`)
 - `LOCAL_API_URL` (optional) - API base URL (default: `http://localhost:3000`)
 
 **Prerequisites:**

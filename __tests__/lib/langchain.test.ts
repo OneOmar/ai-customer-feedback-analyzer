@@ -107,7 +107,11 @@ describe('lib/langchain', () => {
 
   describe('analyzeFeedback', () => {
     beforeEach(() => {
-      // Set up default mock responses for all three LLM calls
+      // Reset mock completely (clears implementation and call history)
+      mockRunLLM.mockReset();
+    });
+
+    it('should return valid analysis with all required fields', async () => {
       mockRunLLM
         .mockResolvedValueOnce(JSON.stringify({ sentiment: 'positive', confidence: 0.85 }))
         .mockResolvedValueOnce(JSON.stringify({ topics: ['product quality', 'customer service'] }))
@@ -115,9 +119,7 @@ describe('lib/langchain', () => {
           summary: 'Customer is satisfied with the product',
           recommendation: 'Continue maintaining quality standards'
         }));
-    });
 
-    it('should return valid analysis with all required fields', async () => {
       const result = await analyzeFeedback('Great product, excellent service!');
 
       expect(result).toHaveProperty('sentiment');
@@ -128,12 +130,28 @@ describe('lib/langchain', () => {
     });
 
     it('should have sentiment in allowed set', async () => {
+      mockRunLLM
+        .mockResolvedValueOnce(JSON.stringify({ sentiment: 'neutral', confidence: 0.7 }))
+        .mockResolvedValueOnce(JSON.stringify({ topics: ['product'] }))
+        .mockResolvedValueOnce(JSON.stringify({ 
+          summary: 'Product is okay',
+          recommendation: 'No action needed'
+        }));
+
       const result = await analyzeFeedback('The product is okay.');
 
       expect(['positive', 'neutral', 'negative', 'mixed']).toContain(result.sentiment);
     });
 
     it('should return positive sentiment correctly', async () => {
+      mockRunLLM
+        .mockResolvedValueOnce(JSON.stringify({ sentiment: 'positive', confidence: 0.85 }))
+        .mockResolvedValueOnce(JSON.stringify({ topics: ['satisfaction'] }))
+        .mockResolvedValueOnce(JSON.stringify({ 
+          summary: 'Customer loves product',
+          recommendation: 'Keep it up'
+        }));
+
       const result = await analyzeFeedback('Amazing product!');
 
       expect(result.sentiment).toBe('positive');
@@ -141,15 +159,31 @@ describe('lib/langchain', () => {
     });
 
     it('should return topics array with at least 1 item', async () => {
+      mockRunLLM
+        .mockResolvedValueOnce(JSON.stringify({ sentiment: 'mixed', confidence: 0.6 }))
+        .mockResolvedValueOnce(JSON.stringify({ topics: ['shipping', 'product quality'] }))
+        .mockResolvedValueOnce(JSON.stringify({ 
+          summary: 'Mixed feedback on shipping and quality',
+          recommendation: 'Improve shipping speed'
+        }));
+
       const result = await analyzeFeedback('The shipping was fast but product quality needs improvement.');
 
       expect(Array.isArray(result.topics)).toBe(true);
       expect(result.topics.length).toBeGreaterThanOrEqual(1);
+      expect(result.topics).toContain('shipping');
       expect(result.topics).toContain('product quality');
-      expect(result.topics).toContain('customer service');
     });
 
     it('should return non-empty summary', async () => {
+      mockRunLLM
+        .mockResolvedValueOnce(JSON.stringify({ sentiment: 'positive', confidence: 0.8 }))
+        .mockResolvedValueOnce(JSON.stringify({ topics: ['quality'] }))
+        .mockResolvedValueOnce(JSON.stringify({ 
+          summary: 'Customer is satisfied',
+          recommendation: 'Maintain quality'
+        }));
+
       const result = await analyzeFeedback('Good product overall.');
 
       expect(result.summary).toBeTruthy();
@@ -158,6 +192,14 @@ describe('lib/langchain', () => {
     });
 
     it('should return non-empty recommendation', async () => {
+      mockRunLLM
+        .mockResolvedValueOnce(JSON.stringify({ sentiment: 'negative', confidence: 0.7 }))
+        .mockResolvedValueOnce(JSON.stringify({ topics: ['packaging'] }))
+        .mockResolvedValueOnce(JSON.stringify({ 
+          summary: 'Packaging needs improvement',
+          recommendation: 'Improve packaging quality'
+        }));
+
       const result = await analyzeFeedback('Product needs better packaging.');
 
       expect(result.recommendation).toBeTruthy();
@@ -306,6 +348,13 @@ describe('lib/langchain', () => {
 
     it('should call runLLM with appropriate prompts', async () => {
       const feedbackText = 'Test feedback text';
+      
+      // Set up mocks for this test
+      mockRunLLM
+        .mockResolvedValueOnce(JSON.stringify({ sentiment: 'positive', confidence: 0.8 }))
+        .mockResolvedValueOnce(JSON.stringify({ topics: ['test'] }))
+        .mockResolvedValueOnce(JSON.stringify({ summary: 'Test summary', recommendation: 'Test rec' }));
+
       await analyzeFeedback(feedbackText);
 
       // Check that runLLM was called with prompts containing the feedback text

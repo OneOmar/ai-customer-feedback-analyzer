@@ -142,7 +142,12 @@ export async function embedText(text: string): Promise<number[]> {
     return embedding;
   } catch (error) {
     const endTime = Date.now();
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    let message = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Check for quota/billing errors and provide helpful message
+    if (message.includes('429') || message.includes('quota') || message.includes('billing')) {
+      message = 'OpenAI API quota exceeded. Please check your billing and usage limits at https://platform.openai.com/usage';
+    }
     
     // Log failed embedding generation
     logTelemetry({
@@ -154,6 +159,7 @@ export async function embedText(text: string): Promise<number[]> {
       metadata: {
         model,
         textLength: text.length,
+        isQuotaError: message.includes('quota') || message.includes('429'),
       },
     });
     
@@ -234,7 +240,12 @@ export async function runLLM(prompt: string, maxTokens: number = 1000): Promise<
     return content;
   } catch (error) {
     const endTime = Date.now();
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    let message = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Check for quota/billing errors and provide helpful message
+    if (message.includes('429') || message.includes('quota') || message.includes('billing')) {
+      message = 'OpenAI API quota exceeded. Please check your billing and usage limits at https://platform.openai.com/usage';
+    }
     
     // Log failed LLM completion
     logTelemetry({
@@ -247,6 +258,7 @@ export async function runLLM(prompt: string, maxTokens: number = 1000): Promise<
         model,
         promptLength: prompt.length,
         maxTokens,
+        isQuotaError: message.includes('quota') || message.includes('429'),
       },
     });
     
