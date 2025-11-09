@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs'
 import Link from 'next/link'
+import { Toaster } from "@/components/ui/toaster"
 import "@/styles/globals.css"
 
 // Load Inter font with Latin subset
@@ -107,6 +108,7 @@ export default function RootLayout({
             </div>
           </footer>
         </div>
+        <Toaster />
       </body>
     </html>
     </ClerkProvider>

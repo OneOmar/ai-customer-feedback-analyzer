@@ -9,23 +9,27 @@
  * Environment Variables:
  * - TEST_USER_ID: User ID to use for testing (optional, defaults to test_user_<timestamp>)
  * - LOCAL_API_URL: Base API URL (default: http://localhost:3000)
+ * - DISABLE_AUTH: Set to "true" to disable authentication for testing (REQUIRED for test script)
  * 
  * Usage:
- *   # Basic usage (uses default test user ID)
- *   npm run test:analyze
+ *   # Basic usage with auth disabled (PowerShell)
+ *   $env:DISABLE_AUTH="true"; npm run test:analyze
  * 
  *   # With specific user ID (PowerShell)
- *   $env:TEST_USER_ID="user_123"; npm run test:analyze
+ *   $env:DISABLE_AUTH="true"; $env:TEST_USER_ID="user_123"; npm run test:analyze
  * 
  *   # With specific user ID (Bash/Unix)
- *   TEST_USER_ID=user_123 npm run test:analyze
+ *   DISABLE_AUTH=true TEST_USER_ID=user_123 npm run test:analyze
  * 
  *   # With custom API URL (PowerShell)
- *   $env:LOCAL_API_URL="http://localhost:4000"; $env:TEST_USER_ID="user_123"; npm run test:analyze
+ *   $env:DISABLE_AUTH="true"; $env:LOCAL_API_URL="http://localhost:4000"; $env:TEST_USER_ID="user_123"; npm run test:analyze
  * 
  *   # Or add to .env file:
+ *   DISABLE_AUTH=true
  *   TEST_USER_ID=user_123
  *   LOCAL_API_URL=http://localhost:3000
+ * 
+ * Note: DISABLE_AUTH should only be used in development/test environments!
  */
 
 import * as dotenv from 'dotenv';
@@ -82,6 +86,28 @@ async function testAnalyzeEndpoint(): Promise<void> {
     console.warn(`   Or add TEST_USER_ID to your .env file`);
     console.warn('');
   }
+
+  // Check if authentication is disabled
+  // Note: This only checks the test script's environment, not the server's
+  // The server reads from .env.local, which needs to be loaded when the server starts
+  const disableAuth = process.env.DISABLE_AUTH === 'true' || process.env.NODE_ENV === 'test';
+  
+  console.log('📋 Authentication Status:');
+  console.log(`   DISABLE_AUTH in test script: ${process.env.DISABLE_AUTH || '(not set)'}`);
+  console.log(`   Note: Server reads from .env.local - make sure DISABLE_AUTH=true is in .env.local`);
+  console.log(`   and the Next.js dev server has been restarted after adding it.`);
+  console.log('');
+  
+  if (!disableAuth) {
+    console.warn('⚠️  Warning: DISABLE_AUTH not set in test script environment.');
+    console.warn('   However, if DISABLE_AUTH=true is in .env.local and the server was restarted,');
+    console.warn('   authentication should still be disabled on the server side.');
+    console.warn('');
+  }
+  
+  console.log('💡 Important: Make sure your Next.js dev server was started AFTER adding DISABLE_AUTH=true to .env.local');
+  console.log('   If the server was running before, restart it with: npm run dev');
+  console.log('');
 
   const apiUrl = `${LOCAL_API_URL}/api/analyze`;
 
