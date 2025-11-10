@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { analyzeFeedbackBatch, type FeedbackItem } from '@/lib/analyze'
-// import { checkQuota } from '@/lib/billing'; // TODO: Import when billing module is ready
+import { checkUserQuota, incrementUsage } from '@/lib/billing'
 
 /**
  * Request body interface for batch processing
@@ -16,10 +16,18 @@ interface AnalyzeRequestBody {
  * 
  * Batch analyzes customer feedback items by:
  * 1. Validating request (max 200 items per batch)
- * 2. Inserting feedback records into database
- * 3. Generating and storing embeddings (batched where possible)
- * 4. Running AI analysis with concurrency control (sentiment, topics, summary, recommendation)
- * 5. Storing analysis results
+ * 2. Checking user quota before processing (returns 402 if quota exceeded)
+ * 3. Inserting feedback records into database
+ * 4. Generating and storing embeddings (batched where possible)
+ * 5. Running AI analysis with concurrency control (sentiment, topics, summary, recommendation)
+ * 6. Storing analysis results
+ * 7. Incrementing usage count for successfully analyzed items
+ * 
+ * Quota Enforcement:
+ * - Checks quota before processing to avoid charging for denied requests
+ * - For batch mode, requires quota >= number of items being processed
+ * - Returns 402 (Payment Required) if quota is insufficient
+ * - Only increments usage for successfully analyzed items
  * 
  * Cost: ~3 LLM API calls per item (sentiment, topics, summary)
  * Rate limiting: Uses concurrency control to avoid overwhelming APIs
@@ -69,30 +77,55 @@ export async function POST(request: NextRequest) {
       console.warn(`⚠️  Authentication bypassed (DISABLE_AUTH=${disableAuthEnv}, NODE_ENV=${process.env.NODE_ENV})`)
     }
 
-    // TODO: Check billing quota before performing heavy operations
+    // Check billing quota before performing heavy operations
     // Important: Check quota BEFORE processing batch to avoid charging for denied requests
-    // Uncomment when billing module is ready:
-    /*
-    const quotaCheck = await checkQuota(userId, {
-      operationType: 'analyze',
-      itemCount: items.length
-    });
+    const quota = await checkUserQuota(userId)
     
-    if (!quotaCheck.allowed) {
+    // For batch mode, check if user has enough quota for all items being processed
+    const itemsCount = items.length
+    if (!quota.allowed || quota.remaining < itemsCount) {
       return NextResponse.json(
         { 
-          error: 'Quota exceeded', 
-          message: quotaCheck.message,
-          remaining: quotaCheck.remaining,
-          upgradeUrl: '/pricing'
+          error: 'Upgrade required',
+          plan: quota.plan,
+          remaining: quota.remaining,
         },
-        { status: 429 } // Too Many Requests
-      );
+        { status: 402 } // Payment Required
+      )
     }
-    */
 
     // Call shared analyze function
     const result = await analyzeFeedbackBatch(userId, items)
+
+    // Increment usage for each successfully analyzed item
+    // Only count items that were successfully analyzed (not just inserted)
+    const successfulAnalyses = result.results.filter((r) => r.success && r.analysis)
+    
+    // Increment usage for each successful analysis
+    // Note: incrementUsage increments by 1 per call, so we call it sequentially for each successful item
+    // Sequential calls prevent race conditions when updating the usage counter
+    let usageIncremented = 0
+    for (const _ of successfulAnalyses) {
+      try {
+        const success = await incrementUsage(userId)
+        if (success) {
+          usageIncremented++
+        } else {
+          console.warn(`Failed to increment usage for user ${userId}`)
+        }
+      } catch (error) {
+        console.error(`Error incrementing usage for user ${userId}:`, error)
+        // Continue processing even if usage increment fails
+        // The analysis was successful, so we log the error but don't fail the request
+      }
+    }
+
+    // Log usage increment summary
+    if (usageIncremented !== successfulAnalyses.length) {
+      console.warn(
+        `Usage increment mismatch: ${usageIncremented}/${successfulAnalyses.length} increments succeeded`
+      )
+    }
 
     // Return batch results
     return NextResponse.json(result)
