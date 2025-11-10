@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs'
 import Link from 'next/link'
+import { Zap } from 'lucide-react'
 import { Toaster } from "@/components/ui/toaster"
 import "@/styles/globals.css"
 
@@ -79,8 +80,19 @@ export default function RootLayout({
                   </SignInButton>
                 </SignedOut>
                 
-                {/* Show user avatar and menu when signed in */}
+                {/* Show upgrade button and user menu when signed in */}
                 <SignedIn>
+                  <Link 
+                    href="/pricing"
+                    className="group relative inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-semibold bg-primary text-primary-foreground shadow-sm shadow-primary/20 h-9 px-4 transition-all duration-200 ease-out hover:bg-primary/90 hover:shadow-md hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50"
+                    aria-label="Upgrade your plan to unlock premium features"
+                  >
+                    <Zap 
+                      className="h-3.5 w-3.5 transition-all duration-200 group-hover:scale-110 group-hover:rotate-12" 
+                      aria-hidden="true"
+                    />
+                    <span>Upgrade</span>
+                  </Link>
                   <UserButton 
                     afterSignOutUrl="/"
                     appearance={{
