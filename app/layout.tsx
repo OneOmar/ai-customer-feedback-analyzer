@@ -69,29 +69,27 @@ export default function RootLayout({
               </SignedIn>
               
               {/* Auth buttons and user menu */}
-              <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
-                <nav className="flex items-center gap-2">
-                  {/* Show sign-in button when signed out */}
-                  <SignedOut>
-                    <SignInButton mode="modal">
-                      <button className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
-                        Sign In
-                      </button>
-                    </SignInButton>
-                  </SignedOut>
-                  
-                  {/* Show user avatar and menu when signed in */}
-                  <SignedIn>
-                    <UserButton 
-                      afterSignOutUrl="/"
-                      appearance={{
-                        elements: {
-                          avatarBox: "w-9 h-9"
-                        }
-                      }}
-                    />
-                  </SignedIn>
-                </nav>
+              <div className="flex flex-1 items-center justify-end gap-2">
+                {/* Show sign-in button when signed out */}
+                <SignedOut>
+                  <SignInButton mode="modal">
+                    <button className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+                      Sign In
+                    </button>
+                  </SignInButton>
+                </SignedOut>
+                
+                {/* Show user avatar and menu when signed in */}
+                <SignedIn>
+                  <UserButton 
+                    afterSignOutUrl="/"
+                    appearance={{
+                      elements: {
+                        avatarBox: "w-9 h-9"
+                      }
+                    }}
+                  />
+                </SignedIn>
               </div>
             </div>
           </header>

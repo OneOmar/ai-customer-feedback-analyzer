@@ -5,8 +5,8 @@
  * for the AI Feedback Analyzer application.
  * 
  * Plans:
- * - FREE: 100 analyses/month
- * - PRO: 1,000 analyses/month
+ * - FREE: 50 analyses/month
+ * - PRO: 2,000 analyses/month
  * - BUSINESS: 10,000 analyses/month
  * 
  * Usage:
@@ -98,10 +98,10 @@ export interface QuotaResult {
 export const PLANS: Record<PlanType, PlanConfig> = {
   free: {
     name: 'Free',
-    monthlyAnalyses: 100,
+    monthlyAnalyses: 50,
     maxFeedbackStorage: 500,
     features: [
-      'Up to 100 AI analyses per month',
+      'Up to 50 AI analyses per month',
       'Basic sentiment analysis',
       'CSV upload',
       'Basic charts and analytics',
@@ -111,10 +111,10 @@ export const PLANS: Record<PlanType, PlanConfig> = {
   },
   pro: {
     name: 'Pro',
-    monthlyAnalyses: 1000,
+    monthlyAnalyses: 2000,
     maxFeedbackStorage: 10000,
     features: [
-      'Up to 1,000 AI analyses per month',
+      'Up to 2,000 AI analyses per month',
       'Advanced sentiment analysis',
       'Topic extraction',
       'Bulk CSV upload (up to 10MB)',
@@ -148,8 +148,160 @@ export const PLANS: Record<PlanType, PlanConfig> = {
 }
 
 // ============================================================================
+// PLAN LIMITS
+// ============================================================================
+
+/**
+ * Get monthly analysis limit for a plan
+ * 
+ * @param plan - Plan type ('free', 'pro', or 'business')
+ * @returns Monthly analysis limit for the plan
+ * 
+ * @example
+ * ```typescript
+ * const freeLimit = getPlanLimits('free') // Returns 50
+ * const proLimit = getPlanLimits('pro') // Returns 2000
+ * const businessLimit = getPlanLimits('business') // Returns 10000
+ * ```
+ */
+export function getPlanLimits(plan: PlanType): number {
+  return PLANS[plan].monthlyAnalyses
+}
+
+// ============================================================================
 // QUOTA CHECKING
 // ============================================================================
+
+/**
+ * Quota check result for checkUserQuota
+ */
+export interface UserQuotaResult {
+  allowed: boolean
+  remaining: number
+  plan: PlanType
+  status?: 'active' | 'cancelled' | 'past_due' | 'trialing'
+}
+
+/**
+ * Check user quota for AI analysis
+ * 
+ * Reads subscription from Supabase, detects plan, and reads usage for current billing period.
+ * Returns a simplified result with allowed status, remaining quota, and plan.
+ * 
+ * @param userId - Clerk user ID
+ * @returns UserQuotaResult with allowed status, remaining quota, and plan
+ * 
+ * @example
+ * ```typescript
+ * // In an API route
+ * import { checkUserQuota, incrementUsage } from '@/lib/billing'
+ * 
+ * export async function POST(req: Request) {
+ *   const { userId } = await auth()
+ *   
+ *   // Check quota before processing
+ *   const quota = await checkUserQuota(userId!)
+ *   
+ *   if (!quota.allowed) {
+ *     return NextResponse.json({
+ *       error: 'Quota exceeded',
+ *       message: `You have ${quota.remaining} analyses remaining on your ${quota.plan} plan.`
+ *     }, { status: 429 })
+ *   }
+ *   
+ *   // Perform AI analysis...
+ *   const result = await analyzeWithAI(feedbackText)
+ *   
+ *   // Increment usage after success
+ *   await incrementUsage(userId!)
+ *   
+ *   return NextResponse.json({ 
+ *     success: true,
+ *     data: result,
+ *     quota: {
+ *       remaining: quota.remaining - 1
+ *     }
+ *   })
+ * }
+ * ```
+ */
+export async function checkUserQuota(userId: string): Promise<UserQuotaResult> {
+  try {
+    const supabase = createServerClient()
+
+    // Read subscription from Supabase
+    const { data: subscription, error: subError } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
+
+    // If no subscription exists, create a free one
+    if (subError || !subscription) {
+      const newSub = await createFreeSubscription(userId)
+      const limit = getPlanLimits('free')
+      return {
+        allowed: true,
+        remaining: limit,
+        plan: 'free',
+        status: 'active',
+      }
+    }
+
+    // Detect plan from subscription
+    const plan = subscription.plan as PlanType
+    const limit = getPlanLimits(plan)
+
+    // Get current billing period dates
+    const periodStart = new Date(subscription.current_period_start)
+    const periodEnd = new Date(subscription.current_period_end)
+    const now = new Date()
+
+    // Check if we're past the billing period (should be handled by webhook, but handle here too)
+    if (now > periodEnd) {
+      // Period expired - usage should be reset by webhook, but return fresh quota
+      return {
+        allowed: true,
+        remaining: limit,
+        plan,
+        status: subscription.status,
+      }
+    }
+
+    // Read usage for current billing period
+    const { data: usage, error: usageError } = await supabase
+      .from('usage')
+      .select('analyses_count')
+      .eq('user_id', userId)
+      .gte('period_start', periodStart.toISOString())
+      .lte('period_end', periodEnd.toISOString())
+      .single()
+
+    const used = usage?.analyses_count || 0
+    const remaining = Math.max(0, limit - used)
+    
+    // User is allowed if they have remaining quota and subscription is active or trialing
+    const allowed = remaining > 0 && (subscription.status === 'active' || subscription.status === 'trialing')
+
+    return {
+      allowed,
+      remaining,
+      plan,
+      status: subscription.status,
+    }
+
+  } catch (error) {
+    console.error('Error checking user quota:', error)
+    
+    // On error, return restrictive result
+    return {
+      allowed: false,
+      remaining: 0,
+      plan: 'free',
+      status: 'active',
+    }
+  }
+}
 
 /**
  * Check if user has quota remaining for AI analysis
@@ -287,26 +439,20 @@ export async function checkQuota(userId: string): Promise<QuotaResult> {
 /**
  * Increment usage count for the current billing period
  * 
+ * Increments analyses_count by 1 for the user's current billing period.
  * Uses upsert to create or update the usage record.
  * Safe to call multiple times.
  * 
  * @param userId - Clerk user ID
- * @param count - Number of analyses to add (default: 1)
  * @returns Success boolean
  * 
  * @example
  * ```typescript
  * // After successful AI analysis
  * await incrementUsage(userId)
- * 
- * // Or increment by multiple
- * await incrementUsage(userId, 5) // For batch processing
  * ```
  */
-export async function incrementUsage(
-  userId: string,
-  count: number = 1
-): Promise<boolean> {
+export async function incrementUsage(userId: string): Promise<boolean> {
   try {
     const supabase = createServerClient()
 
@@ -335,11 +481,11 @@ export async function incrementUsage(
       .single()
 
     if (existingUsage) {
-      // Update existing record
+      // Update existing record - increment analyses_count by 1
       const { error } = await supabase
         .from('usage')
         .update({ 
-          analyses_count: existingUsage.analyses_count + count,
+          analyses_count: existingUsage.analyses_count + 1,
           updated_at: new Date().toISOString()
         })
         .eq('id', existingUsage.id)
@@ -349,14 +495,14 @@ export async function incrementUsage(
         return false
       }
     } else {
-      // Create new usage record
+      // Create new usage record with analyses_count = 1
       const { error } = await supabase
         .from('usage')
         .insert({
           user_id: userId,
           period_start: periodStart,
           period_end: periodEnd,
-          analyses_count: count,
+          analyses_count: 1,
           feedback_count: 0
         })
 
