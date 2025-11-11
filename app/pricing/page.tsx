@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { PLANS } from "@/lib/billing"
-import { Check } from "lucide-react"
+import { Check, Mail, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { UpgradeButton } from "@/components/upgrade-button"
 import { getCurrentAuth } from "@/lib/auth"
@@ -193,6 +193,46 @@ export default async function PricingPage() {
             </CardFooter>
           </Card>
         </div>
+
+        {/* Contact Sales Section */}
+        <section 
+          className="mt-16 border-t pt-12"
+          aria-labelledby="contact-sales-heading"
+        >
+          <div className="max-w-2xl mx-auto text-center space-y-6">
+            <div className="space-y-3">
+              <h2 
+                id="contact-sales-heading"
+                className="text-2xl font-bold tracking-tight sm:text-3xl"
+              >
+                Contact Sales for More Information
+              </h2>
+              <p className="text-base text-muted-foreground sm:text-lg">
+                Our sales team is here to help you find the perfect solution for your business needs. 
+                Get in touch to discuss custom plans, enterprise features, or any questions you may have.
+              </p>
+            </div>
+
+            {/* Primary CTA */}
+            <div className="pt-2">
+              <Button
+                asChild
+                size="lg"
+                className="min-w-[200px] focus-visible:ring-2 focus-visible:ring-offset-2"
+                aria-label="Contact sales team - primary call to action"
+              >
+                <a 
+                  href="mailto:sales@example.com?subject=Sales Inquiry&body=Hello, I'm interested in learning more about your plans."
+                  className="inline-flex items-center justify-center gap-2"
+                >
+                  <Mail className="h-4 w-4" aria-hidden="true" />
+                  Contact Sales
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </section>
 
         {/* FAQ Section */}
         <div className="mt-16 border-t pt-12">

@@ -12,45 +12,48 @@ import { SignedIn, SignedOut } from "@clerk/nextjs"
  */
 export default function HomePage() {
   return (
-    <div className="container py-10">
-      {/* Hero Section */}
-      <section className="mx-auto flex max-w-[980px] flex-col items-center gap-2 py-8 md:py-12 md:pb-8 lg:py-24 lg:pb-20">
-        <h1 className="text-center text-3xl font-bold leading-tight tracking-tighter md:text-5xl lg:leading-[1.1]">
-          AI Customer Feedback Analyzer
-        </h1>
-        <p className="max-w-[750px] text-center text-lg text-muted-foreground sm:text-xl">
-          Transform customer feedback into actionable insights with AI-powered analysis.
-          Upload, analyze, and visualize sentiment at scale.
-        </p>
-        <div className="flex gap-4 mt-6">
-          <SignedOut>
-            <Button size="lg" asChild>
-              <Link href="/sign-up">Get Started Free</Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link href="/pricing">View Pricing</Link>
-            </Button>
-          </SignedOut>
-          <SignedIn>
-            <Button size="lg" asChild>
-              <Link href="/dashboard">Go to Dashboard</Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link href="/pricing">
-                Upgrade Plan
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </SignedIn>
+    <div>
+      {/* Hero Section - Full Viewport Height */}
+      <section className="flex min-h-screen flex-col items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[980px] flex flex-col items-center justify-center text-center space-y-6">
+          <h1 className="text-3xl font-bold leading-tight tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl lg:leading-[1.1]">
+            AI Customer Feedback Analyzer
+          </h1>
+          <p className="max-w-[750px] text-lg text-muted-foreground sm:text-xl md:text-2xl">
+            Transform customer feedback into actionable insights with AI-powered analysis.
+            Upload, analyze, and visualize sentiment at scale.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 mt-8 w-full sm:w-auto">
+            <SignedOut>
+              <Button size="lg" className="w-full sm:w-auto" asChild>
+                <Link href="/sign-up">Get Started Free</Link>
+              </Button>
+              <Button size="lg" variant="outline" className="w-full sm:w-auto" asChild>
+                <Link href="/pricing">View Pricing</Link>
+              </Button>
+            </SignedOut>
+            <SignedIn>
+              <Button size="lg" className="w-full sm:w-auto" asChild>
+                <Link href="/dashboard">Go to Dashboard</Link>
+              </Button>
+              <Button size="lg" variant="outline" className="w-full sm:w-auto" asChild>
+                <Link href="/pricing">
+                  Upgrade Plan
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </SignedIn>
+          </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="mx-auto max-w-[980px] py-8 md:py-12">
-        <h2 className="text-2xl font-bold tracking-tight text-center mb-8">
-          Key Features
-        </h2>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Features Section - Full Viewport Height */}
+      <section className="flex min-h-screen flex-col items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[980px] flex flex-col items-center justify-center">
+          <h2 className="text-2xl font-bold tracking-tight text-center mb-8 sm:text-3xl md:text-4xl lg:mb-12">
+            Key Features
+          </h2>
+          <div className="grid gap-6 w-full sm:grid-cols-2 lg:grid-cols-3">
           {/* Feature Card 1 */}
           <div className="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
             <h3 className="mb-2 text-lg font-semibold">CSV Upload</h3>
@@ -98,21 +101,23 @@ export default function HomePage() {
               Generate and download comprehensive analysis reports.
             </p>
           </div>
+          </div>
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section className="mx-auto max-w-[980px] py-8 md:py-12">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold tracking-tight mb-4">
-            Simple, Transparent Pricing
-          </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Choose the plan that fits your needs. Upgrade or downgrade at any time.
-          </p>
-        </div>
+      {/* Pricing Section - Full Viewport Height */}
+      <section className="flex min-h-screen flex-col items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[980px] flex flex-col items-center justify-center">
+          <div className="text-center mb-8 sm:mb-12 w-full">
+            <h2 className="text-2xl font-bold tracking-tight mb-4 sm:text-3xl md:text-4xl">
+              Simple, Transparent Pricing
+            </h2>
+            <p className="text-base text-muted-foreground max-w-2xl mx-auto sm:text-lg md:text-xl">
+              Choose the plan that fits your needs. Upgrade or downgrade at any time.
+            </p>
+          </div>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 w-full sm:grid-cols-2 lg:grid-cols-3">
           {/* Free Plan */}
           <Card>
             <CardHeader>
@@ -227,13 +232,14 @@ export default function HomePage() {
           </Card>
         </div>
 
-        <div className="text-center mt-8">
-          <Button variant="link" asChild>
-            <Link href="/pricing">
-              View All Plans and Features
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
+          <div className="text-center mt-8 sm:mt-12">
+            <Button variant="link" className="text-base sm:text-lg" asChild>
+              <Link href="/pricing">
+                View All Plans and Features
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
       </section>
     </div>
