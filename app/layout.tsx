@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs'
-import Link from 'next/link'
-import { Zap } from 'lucide-react'
+import { ClerkProvider } from '@clerk/nextjs'
 import { Toaster } from "@/components/ui/toaster"
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
 import "@/styles/globals.css"
 
 // Load Inter font with Latin subset
@@ -36,87 +36,14 @@ export default function RootLayout({
       <html lang="en" suppressHydrationWarning>
         <body className={inter.className}>
           <div className="relative flex min-h-screen flex-col">
-          {/* Header with authentication UI */}
-          <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="container flex h-14 items-center">
-              <div className="mr-4 flex">
-                <Link href="/" className="mr-6 flex items-center space-x-2">
-                  <span className="font-bold">AI Feedback Analyzer</span>
-                </Link>
-              </div>
-              
-              {/* Navigation - visible when signed in */}
-              <SignedIn>
-                <nav className="flex flex-1 items-center space-x-6 text-sm font-medium">
-                  <Link 
-                    href="/dashboard" 
-                    className="transition-colors hover:text-foreground/80 text-foreground/60"
-                  >
-                    Dashboard
-                  </Link>
-                  <Link 
-                    href="/dashboard/upload" 
-                    className="transition-colors hover:text-foreground/80 text-foreground/60"
-                  >
-                    Upload
-                  </Link>
-                  <Link 
-                    href="/dashboard/analytics" 
-                    className="transition-colors hover:text-foreground/80 text-foreground/60"
-                  >
-                    Analytics
-                  </Link>
-                </nav>
-              </SignedIn>
-              
-              {/* Auth buttons and user menu */}
-              <div className="flex flex-1 items-center justify-end gap-2">
-                {/* Show sign-in button when signed out */}
-                <SignedOut>
-                  <SignInButton mode="modal">
-                    <button className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
-                      Sign In
-                    </button>
-                  </SignInButton>
-                </SignedOut>
-                
-                {/* Show upgrade button and user menu when signed in */}
-                <SignedIn>
-                  <Link 
-                    href="/pricing"
-                    className="group relative inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-semibold bg-primary text-primary-foreground shadow-sm shadow-primary/20 h-9 px-4 transition-all duration-200 ease-out hover:bg-primary/90 hover:shadow-md hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50"
-                    aria-label="Upgrade your plan to unlock premium features"
-                  >
-                    <Zap 
-                      className="h-3.5 w-3.5 transition-all duration-200 group-hover:scale-110 group-hover:rotate-12" 
-                      aria-hidden="true"
-                    />
-                    <span>Upgrade</span>
-                  </Link>
-                  <UserButton 
-                    afterSignOutUrl="/"
-                    appearance={{
-                      elements: {
-                        avatarBox: "w-9 h-9"
-                      }
-                    }}
-                  />
-                </SignedIn>
-              </div>
-            </div>
-          </header>
+          {/* Responsive Header with mobile menu */}
+          <Header />
 
           {/* Main content area */}
           <main className="flex-1">{children}</main>
 
-          {/* Footer placeholder - will be extracted to component */}
-          <footer className="border-t py-6 md:py-0">
-            <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
-              <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-                Built with Next.js, Tailwind CSS, and shadcn/ui.
-              </p>
-            </div>
-          </footer>
+          {/* Responsive Footer */}
+          <Footer />
         </div>
         <Toaster />
       </body>
