@@ -1,6 +1,5 @@
 import { requireAuth } from '@/lib/auth'
-import { DashboardContent } from '@/components/dashboard-content'
-import { QuotaDisplay } from '@/components/quota-display'
+import { DashboardWrapper } from '@/components/dashboard-wrapper'
 
 /**
  * Protected Dashboard Page
@@ -25,12 +24,7 @@ export default async function DashboardPage() {
           </p>
         </div>
 
-        {/* Quota Display */}
-        <div className="mb-6">
-          <QuotaDisplay />
-        </div>
-
-        <DashboardContent />
+        <DashboardWrapper />
       </div>
     </div>
   )
