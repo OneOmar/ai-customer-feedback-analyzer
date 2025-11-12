@@ -84,7 +84,14 @@ function computeTopicFrequencies(data: FeedbackWithAnalysis[]): TopicData[] {
  * - Displays charts and feedback cards
  * - Supports refetch after new upload
  */
-export function DashboardContent() {
+interface DashboardContentProps {
+  /**
+   * Callback to refresh quota display after analysis completes
+   */
+  onQuotaRefresh?: () => void
+}
+
+export function DashboardContent({ onQuotaRefresh }: DashboardContentProps) {
   const { toast } = useToast()
   const [data, setData] = useState<FeedbackWithAnalysis[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -122,7 +129,11 @@ export function DashboardContent() {
   const handleRefetch = useCallback(async () => {
     setIsRefreshing(true)
     await fetchData()
-  }, [fetchData])
+    // Also refresh quota display if callback is provided
+    if (onQuotaRefresh) {
+      onQuotaRefresh()
+    }
+  }, [fetchData, onQuotaRefresh])
 
   // Fetch data on mount
   useEffect(() => {

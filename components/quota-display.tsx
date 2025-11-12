@@ -14,6 +14,10 @@ import { QuotaWarning } from "@/components/feature-gate"
  */
 interface QuotaDisplayProps {
   className?: string
+  /**
+   * Refresh trigger - when this value changes, the quota will be refetched
+   */
+  refreshTrigger?: number
 }
 
 interface QuotaData {
@@ -24,13 +28,17 @@ interface QuotaData {
   resetsAt: string
 }
 
-export function QuotaDisplay({ className }: QuotaDisplayProps) {
+export function QuotaDisplay({ className, refreshTrigger }: QuotaDisplayProps) {
   const [quota, setQuota] = useState<QuotaData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     async function fetchQuota() {
       try {
+        // Only show loading state on initial load, not on refresh
+        if (!quota) {
+          setIsLoading(true)
+        }
         const response = await fetch("/api/quota")
         if (response.ok) {
           const data = await response.json()
@@ -46,9 +54,15 @@ export function QuotaDisplay({ className }: QuotaDisplayProps) {
     }
 
     fetchQuota()
-  }, [])
+  }, [refreshTrigger])
 
-  if (isLoading || !quota) {
+  // Only show loading state if we don't have any quota data yet
+  if (isLoading && !quota) {
+    return null
+  }
+
+  // If we don't have quota data and we're not loading, don't render
+  if (!quota) {
     return null
   }
 
