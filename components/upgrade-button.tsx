@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button, ButtonProps } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
-import { PLANS, type PlanType } from "@/lib/billing"
+import { type PlanType } from "@/lib/billing"
 import { Loader2 } from "lucide-react"
 
 /**
@@ -38,24 +38,14 @@ export function UpgradeButton({
     setIsLoading(true)
 
     try {
-      // Get the Stripe price ID for the selected plan
-      const planConfig = PLANS[plan]
-      const priceId = planConfig.stripePriceId
-
-      if (!priceId) {
-        throw new Error(
-          `Price ID not configured for ${plan} plan. Please contact support.`
-        )
-      }
-
-      // Call the checkout API endpoint
-      const response = await fetch("/api/stripe/checkout", {
+      // Call the checkout-plan API endpoint which handles price ID lookup server-side
+      const response = await fetch("/api/stripe/checkout-plan", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          priceId,
+          plan,
         }),
       })
 
