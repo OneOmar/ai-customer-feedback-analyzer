@@ -11,6 +11,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:analyze": "tsx scripts/test-analyze.ts",
+    "test:e2e": "tsx scripts/e2e-smoke.ts",
     "check:env": "tsx scripts/check-env.ts",
     "check:disable-auth": "tsx scripts/check-disable-auth.ts",
     "seed:supabase": "tsx scripts/seed-supabase.ts",
