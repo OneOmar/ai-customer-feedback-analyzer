@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { Toaster } from "@/components/ui/toaster"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
+import { PostHogProvider } from "@/components/posthog-provider"
 import "@/styles/globals.css"
 
 // Load Inter font with Latin subset
@@ -35,6 +36,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <body className={inter.className}>
+          <PostHogProvider />
           <div className="relative flex min-h-screen flex-col">
           {/* Responsive Header with mobile menu */}
           <Header />
