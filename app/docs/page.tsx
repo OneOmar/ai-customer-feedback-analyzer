@@ -104,7 +104,7 @@ export default function DocsPage() {
           <div className="max-w-2xl mx-auto text-center space-y-6">
             <h2 className="text-2xl font-bold">Need More Help?</h2>
             <p className="text-muted-foreground">
-              Can't find what you're looking for? Our support team is here to help.
+              Can&apos;t find what you&apos;re looking for? Our support team is here to help.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild>

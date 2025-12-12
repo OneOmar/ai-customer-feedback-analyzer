@@ -75,10 +75,10 @@ export async function POST(request: NextRequest) {
 
     // Parse CSV using PapaParse
     return new Promise<NextResponse>((resolve) => {
-      Papa.parse(fileContent, {
+      (Papa.parse as any)(fileContent, {
         header: true,
         skipEmptyLines: true,
-        complete: async (results) => {
+        complete: async (results: Papa.ParseResult<Record<string, any>>) => {
           try {
             // Check for parsing errors
             if (results.errors.length > 0) {
@@ -144,17 +144,6 @@ export async function POST(request: NextRequest) {
               )
             )
           }
-        },
-        error: (error) => {
-          resolve(
-            NextResponse.json(
-              {
-                error: 'CSV parsing error',
-                message: error.message || 'Failed to parse CSV file',
-              },
-              { status: 400 }
-            )
-          )
         },
       })
     })

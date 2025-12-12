@@ -261,7 +261,7 @@ export default async function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">What happens if I exceed my limit?</h3>
               <p className="text-sm text-muted-foreground">
-                You'll receive a notification when you're approaching your limit. You can upgrade at any time to continue.
+                You&apos;ll receive a notification when you&apos;re approaching your limit. You can upgrade at any time to continue.
               </p>
             </div>
           </div>

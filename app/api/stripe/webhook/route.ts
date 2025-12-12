@@ -200,7 +200,7 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription): Pro
     
     const userId = 
       subscription.metadata?.userId || 
-      (typeof customer !== 'deleted' ? customer.metadata?.userId : null)
+      (customer && !('deleted' in customer) ? customer.metadata?.userId : null)
 
     if (!userId) {
       console.error('Missing userId in subscription or customer metadata:', subscription.id)
@@ -283,7 +283,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
     
     const userId = 
       subscription.metadata?.userId || 
-      (typeof customer !== 'deleted' ? customer.metadata?.userId : null)
+      (customer && !('deleted' in customer) ? customer.metadata?.userId : null)
 
     // If no userId in metadata, look up existing subscription
     if (!userId) {

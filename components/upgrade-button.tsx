@@ -17,7 +17,7 @@ import { Loader2 } from "lucide-react"
  * <UpgradeButton plan="pro" variant="default" size="lg" />
  * ```
  */
-interface UpgradeButtonProps extends Omit<ButtonProps, "onClick"> {
+interface UpgradeButtonProps extends Omit<ButtonProps, "onClick" | "onError"> {
   plan: PlanType
   onSuccess?: () => void
   onError?: (error: string) => void

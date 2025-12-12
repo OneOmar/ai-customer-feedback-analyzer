@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -31,13 +31,15 @@ interface QuotaData {
 export function QuotaDisplay({ className, refreshTrigger }: QuotaDisplayProps) {
   const [quota, setQuota] = useState<QuotaData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const isInitialMount = useRef(true)
 
   useEffect(() => {
     async function fetchQuota() {
       try {
         // Only show loading state on initial load, not on refresh
-        if (!quota) {
+        if (isInitialMount.current) {
           setIsLoading(true)
+          isInitialMount.current = false
         }
         const response = await fetch("/api/quota")
         if (response.ok) {

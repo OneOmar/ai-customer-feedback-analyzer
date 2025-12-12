@@ -149,11 +149,12 @@ export function initPostHog(apiKey: string): void {
           // Explicitly expose PostHog to window for debugging/console access
           // PostHog should do this automatically, but we ensure it's available
           if (typeof window !== 'undefined') {
-            // @ts-expect-error - posthog-js types
+            // @ts-ignore - posthog-js types - window.posthog is set by PostHog
             window.posthog = ph
           }
         },
         // Handle initialization errors
+        // @ts-ignore - _capture_metrics is a valid PostHog option but not in types
         _capture_metrics: false, // Disable metrics to avoid 401 errors during init
         // Disable feature flags if causing 401 errors (can be re-enabled later)
         advanced_disable_feature_flags_on_first_load: true,

@@ -121,7 +121,7 @@ export default function SupportPage() {
           <CardHeader>
             <CardTitle>Still Need Help?</CardTitle>
             <CardDescription>
-              Can't find what you're looking for? Our support team is ready to assist you.
+              Can&apos;t find what you&apos;re looking for? Our support team is ready to assist you.
             </CardDescription>
           </CardHeader>
           <CardContent>

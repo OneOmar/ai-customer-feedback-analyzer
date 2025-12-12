@@ -157,7 +157,7 @@ export function QuotaWarning({
       </AlertTitle>
       <AlertDescription className="mt-2">
         <p className="mb-2">
-          You've used {used} of {limit} {resource} this month.
+          You&apos;ve used {used} of {limit} {resource} this month.
           {resetDate &&
             !isExceeded &&
             ` Your quota resets on ${resetDate.toLocaleDateString()}.`}

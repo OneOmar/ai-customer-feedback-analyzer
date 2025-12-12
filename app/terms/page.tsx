@@ -25,7 +25,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">1. Agreement to Terms</h2>
             <p className="text-muted-foreground leading-relaxed">
-              By accessing or using AI Feedback Analyzer ("the Service"), you agree to be bound by these 
+              By accessing or using AI Feedback Analyzer (&quot;the Service&quot;), you agree to be bound by these 
               Terms of Service. If you disagree with any part of these terms, you may not access the Service.
             </p>
           </section>

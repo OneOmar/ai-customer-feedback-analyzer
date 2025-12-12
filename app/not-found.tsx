@@ -27,7 +27,7 @@ export default function NotFound() {
         {/* Error Message */}
         <div className="space-y-2">
           <p className="text-base sm:text-lg text-muted-foreground">
-            Sorry, we couldn't find the page you're looking for.
+            Sorry, we couldn&apos;t find the page you&apos;re looking for.
           </p>
           <p className="text-sm text-muted-foreground">
             The page may have been moved, deleted, or the URL might be incorrect.
